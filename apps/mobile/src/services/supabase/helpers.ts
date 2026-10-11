@@ -16,15 +16,15 @@ export function requireClient() {
   return supabaseClient;
 }
 
-export function publicAvatarUrl(path: string | null | undefined): string | undefined {
+export async function signedAvatarUrl(path: string | null | undefined): Promise<string | undefined> {
   if (!path || !isSupabaseConfigured || !supabaseClient) {
     return undefined;
   }
-  const { data } = supabaseClient.storage.from('avatars').getPublicUrl(path);
-  return data.publicUrl;
+  const signed = await trySignedUrlForBucketPath('avatars', path);
+  return signed ?? undefined;
 }
 
-export function mapUserProfile(user: User, row: Tables<'profiles'> | null): UserProfile {
+export async function mapUserProfile(user: User, row: Tables<'profiles'> | null): Promise<UserProfile> {
   const fromMeta = user.user_metadata as Record<string, unknown> | undefined;
   const metaFirst =
     typeof fromMeta?.first_name === 'string' ? fromMeta.first_name : undefined;
@@ -33,20 +33,20 @@ export function mapUserProfile(user: User, row: Tables<'profiles'> | null): User
     firstName: row?.first_name?.trim() || metaFirst?.trim() || 'You',
     email: user.email ?? undefined,
     displayName: row?.display_name ?? (typeof fromMeta?.display_name === 'string' ? fromMeta.display_name : undefined),
-    avatarUrl: publicAvatarUrl(row?.avatar_storage_path ?? undefined),
+    avatarUrl: await signedAvatarUrl(row?.avatar_storage_path ?? undefined),
     timeZone: row?.time_zone ?? null,
   };
 }
 
-export function toSession(user: User, row: Tables<'profiles'> | null): Session {
+export async function toSession(user: User, row: Tables<'profiles'> | null): Promise<Session> {
   return {
-    user: mapUserProfile(user, row),
+    user: await mapUserProfile(user, row),
     signedInAt: user.last_sign_in_at ?? new Date().toISOString(),
   };
 }
 
 export async function signedUrlForBucketPath(
-  bucket: 'presence' | 'prompt_attachments',
+  bucket: 'presence' | 'prompt_attachments' | 'avatars',
   path: string,
   expiresIn = 3600,
 ): Promise<string> {
@@ -56,6 +56,24 @@ export async function signedUrlForBucketPath(
     throw new Error(error?.message ?? 'Failed to create signed URL.');
   }
   return data.signedUrl;
+}
+
+/** Signed URL for one object. A missing or unreadable object returns null. */
+export async function trySignedUrlForBucketPath(
+  bucket: 'presence' | 'prompt_attachments' | 'avatars',
+  path: string,
+  expiresIn = 3600,
+): Promise<string | null> {
+  try {
+    const sb = requireClient();
+    const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, expiresIn);
+    if (error || !data?.signedUrl) {
+      return null;
+    }
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
 }
 
 export function mapInviteFailure(code: string): string {
@@ -69,6 +87,7 @@ export function mapInviteFailure(code: string): string {
     cannot_accept_own_invite: 'Open this link on your partner’s device to finish pairing.',
     already_paired: 'You are already paired with someone.',
     already_member: 'You are already part of this couple.',
+    couple_full: 'This invite was already used.',
     membership_failed: 'Could not join this couple. Try again or request a new invite.',
     couple_update_failed: 'Could not finish pairing. Try again.',
     members_load_failed: 'Could not load couple after pairing.',

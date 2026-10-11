@@ -22,6 +22,7 @@ import {
   useMarkNotificationsRead,
   useNotificationInbox,
 } from '@/features/hooks';
+import { safeNotificationHref } from '@/features/notifications/inboxLabels';
 import type { NotificationCategory, NotificationInboxItem } from '@/types/domain';
 import { usesConfiguredSupabase } from '@/services/apiMode';
 import { supabaseClient } from '@/services/supabase/client';
@@ -149,8 +150,9 @@ export function NotificationInboxBody({
       if (!item.read) {
         markRead.mutate([item.id]);
       }
-      if (item.href) {
-        router.push(item.href as Href);
+      const href = safeNotificationHref(item.href);
+      if (href) {
+        router.push(href as Href);
         onNavigateFromRow?.();
       }
     },

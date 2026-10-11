@@ -16,22 +16,22 @@ describe('mockServices.subscription.redeemPromoCode', () => {
     mockDb.couple = null;
   });
 
-  it('returns invalid_code for wrong code', async () => {
+  it('rejects unknown codes', async () => {
     const r = await mockServices.subscription.redeemPromoCode('NOTBG');
     expect(r).toEqual({ ok: false, error: 'invalid_code' });
     expect(mockDb.subscription.tier).toBe('free');
   });
 
-  it('returns couple_required when not paired', async () => {
+  it('does not grant Plus from a client-known code when unpaired', async () => {
     const r = await mockServices.subscription.redeemPromoCode('BG');
-    expect(r).toEqual({ ok: false, error: 'couple_required' });
+    expect(r).toEqual({ ok: false, error: 'invalid_code' });
     expect(mockDb.subscription.tier).toBe('free');
   });
 
-  it('accepts BG case-insensitively and sets premium when paired', async () => {
+  it('does not grant Plus from a client-known code when paired', async () => {
     mockDb.couple = { ...sampleCouple };
     const r = await mockServices.subscription.redeemPromoCode(' bg ');
-    expect(r).toEqual({ ok: true });
-    expect(mockDb.subscription.tier).toBe('premium');
+    expect(r).toEqual({ ok: false, error: 'invalid_code' });
+    expect(mockDb.subscription.tier).toBe('free');
   });
 });

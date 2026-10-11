@@ -1,10 +1,11 @@
 import type { PromoRedeemResult, ServiceRegistry } from '@/services/ports';
 import { getPathFromRef, parseDeepLink } from '@/lib/deepLinking/deepLinkService';
+import { isValidIanaTimeZone } from '@/lib/userTimeZone';
 import { weekMetaFromMondayYmd } from '@/features/weeklyRecap/recapCandidateFilter';
 import { isSupabaseConfigured, supabaseClient } from '@/services/supabase/client';
 import { loadProfileRow, requireClient, toSession } from '@/services/supabase/helpers';
 import * as backend from '@/services/supabase/supabaseBackend';
-import type { Session, SubscriptionTier } from '@/types/domain';
+import type { Session } from '@/types/domain';
 
 const FOLLOW_UP_SUGGESTIONS = [
   'What was going through your mind in that moment?',
@@ -30,7 +31,7 @@ async function refreshSession(): Promise<Session> {
   }
   const user = sessionData.session.user;
   const profile = await loadProfileRow(user.id);
-  return toSession(user, profile);
+  return await toSession(user, profile);
 }
 
 export const supabaseServices: ServiceRegistry = {
@@ -42,7 +43,7 @@ export const supabaseServices: ServiceRegistry = {
         return null;
       }
       const profile = await loadProfileRow(data.session.user.id);
-      return toSession(data.session.user, profile);
+      return await toSession(data.session.user, profile);
     },
     async signIn({ email, password }) {
       const sb = requireClient();
@@ -59,7 +60,7 @@ export const supabaseServices: ServiceRegistry = {
         throw new Error(msg);
       }
       const profile = await loadProfileRow(data.user.id);
-      return toSession(data.user, profile);
+      return await toSession(data.user, profile);
     },
     async signUp({ email, password, firstName }) {
       const sb = requireClient();
@@ -90,7 +91,7 @@ export const supabaseServices: ServiceRegistry = {
         );
       }
       const profile = await loadProfileRow(data.user.id);
-      return toSession(data.user, profile);
+      return await toSession(data.user, profile);
     },
     async updateProfile(partial) {
       const sb = requireClient();
@@ -109,7 +110,14 @@ export const supabaseServices: ServiceRegistry = {
       }
       if (partial.timeZone !== undefined) {
         const z = partial.timeZone?.trim();
-        patch.time_zone = z && z.length ? z : null;
+        if (z && z.length) {
+          if (!isValidIanaTimeZone(z)) {
+            throw new Error('Choose a valid time zone.');
+          }
+          patch.time_zone = z;
+        } else {
+          patch.time_zone = null;
+        }
       }
       if (Object.keys(patch).length > 0) {
         const { error } = await sb.from('profiles').update(patch).eq('id', user.id);
@@ -237,22 +245,6 @@ export const supabaseServices: ServiceRegistry = {
       const row = await loadProfileRow(user.id);
       const tier = row?.subscription_tier === 'premium' ? ('premium' as const) : ('free' as const);
       return { tier, renewsAtIso: null, source: 'store' as const };
-    },
-    async setMockTier(tier: SubscriptionTier) {
-      const sb = requireClient();
-      const { data: userData } = await sb.auth.getUser();
-      const user = userData.user;
-      if (!user) {
-        throw new Error('Not signed in');
-      }
-      const { error } = await sb
-        .from('profiles')
-        .update({ subscription_tier: tier })
-        .eq('id', user.id);
-      if (error) {
-        throw new Error(error.message);
-      }
-      return supabaseServices.subscription.getSubscription();
     },
     async redeemPromoCode(code: string): Promise<PromoRedeemResult> {
       const sb = requireClient();

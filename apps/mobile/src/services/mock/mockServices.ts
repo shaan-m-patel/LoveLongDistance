@@ -646,20 +646,8 @@ export const mockServices: ServiceRegistry = {
       return withLatency({ ...mockDb.subscription });
     },
     async redeemPromoCode(code: string) {
-      const normalized = code.trim().toUpperCase();
-      if (normalized !== 'BG') {
-        return withLatency({ ok: false as const, error: 'invalid_code' as const });
-      }
-      if (!mockDb.couple) {
-        return withLatency({ ok: false as const, error: 'couple_required' as const });
-      }
-      mockDb.subscription = {
-        ...mockDb.subscription,
-        tier: 'premium',
-        renewsAtIso: '2027-01-01T00:00:00.000Z',
-        source: 'mock',
-      };
-      return withLatency({ ok: true as const });
+      void code;
+      return withLatency({ ok: false as const, error: 'invalid_code' as const });
     },
   },
 };

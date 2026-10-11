@@ -16,3 +16,12 @@ export function getIsPromptRevealed(answers: { userId: string }[]): boolean {
   const uniqueUserCount = new Set(answers.map((item) => item.userId)).size;
   return uniqueUserCount >= 2;
 }
+
+/** Partner answer text and photos stay hidden until the server marks the prompt revealed. */
+export function isPromptAnswerVisibleToViewer(
+  revealed: boolean,
+  viewerId: string | undefined,
+  answerUserId: string,
+): boolean {
+  return revealed || (viewerId != null && viewerId === answerUserId);
+}

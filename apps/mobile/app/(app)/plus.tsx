@@ -17,7 +17,7 @@ function promoErrorMessage(code: PromoRedeemErrorCode): string {
   if (code === 'invalid_code') {
     return 'That code is not valid.';
   }
-  return 'Finish pairing with your partner first—this code unlocks Plus for both of you.';
+  return 'Finish pairing with your partner before using this code.';
 }
 
 const perks = [
@@ -69,7 +69,7 @@ export default function PlusHubScreen() {
           <Text style={{ ...theme.type.caption, color: theme.colors.textMuted }}>
             {sub?.source === 'mock'
               ? 'Active on this device (mock)'
-              : 'Active for you and your partner.'}
+              : 'Active on this account.'}
           </Text>
         ) : null}
       </View>
@@ -99,15 +99,14 @@ export default function PlusHubScreen() {
         </Text>
         <View style={{ gap: spacing.md }}>
           <Body>
-            If you have a code, enter it here. When you are paired with your partner, a valid code unlocks LoveDistance
-            Plus for both of you.
+            If you have a code, enter it here. A valid code unlocks LoveDistance Plus on your account.
           </Body>
           <Input
             autoCapitalize="characters"
             autoCorrect={false}
             editable={!redeemPromo.isPending}
             label="Code"
-            placeholder="e.g. BG"
+            placeholder="Enter code"
             value={promoCode}
             onChangeText={(t) => {
               setPromoCode(t);
@@ -118,7 +117,7 @@ export default function PlusHubScreen() {
           />
           {promoSuccess ? (
             <Text style={{ ...theme.type.bodySm, color: theme.colors.textSecondary }}>
-              Plus is now active for you and your partner on this account.
+              Plus is now active on your account.
             </Text>
           ) : null}
           <Button
