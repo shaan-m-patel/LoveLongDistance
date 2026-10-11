@@ -38,8 +38,7 @@ export default function PlusHubScreen() {
   const [promoFieldError, setPromoFieldError] = useState<string | null>(null);
   const [promoSuccess, setPromoSuccess] = useState(false);
   const premium = sub ? isPremiumTier(sub) : false;
-  const canMockToggle =
-    __DEV__ && typeof services.subscription.setMockTier === 'function';
+  const canMockToggle = __DEV__ && typeof services.subscription.setMockTier === 'function';
 
   async function applyPromo() {
     setPromoFieldError(null);
@@ -63,13 +62,18 @@ export default function PlusHubScreen() {
       lead="Nothing here is required to feel close day to day. Plus is for couples who want a little more structure and delight later on."
       title="LoveDistance Plus"
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.sm,
+          marginBottom: spacing.xs,
+        }}
+      >
         <PremiumBadge />
         {premium ? (
           <Text style={{ ...theme.type.caption, color: theme.colors.textMuted }}>
-            {sub?.source === 'mock'
-              ? 'Active on this device (mock)'
-              : 'Active on this account.'}
+            {sub?.source === 'mock' ? 'Active on this device (mock)' : 'Active on this account.'}
           </Text>
         ) : null}
       </View>
@@ -80,26 +84,39 @@ export default function PlusHubScreen() {
         ) : (
           <View style={{ gap: spacing.md }}>
             <Body>
-              Billing is not connected yet. When it is, Plus will fund ongoing work on prompts, rituals, and polish.
+              Billing is not connected yet. When it is, Plus will fund ongoing work on prompts,
+              rituals, and polish.
             </Body>
-            <Text style={{ ...theme.type.bodySm, color: theme.colors.textPrimary, fontWeight: '600' }}>
+            <Text
+              style={{ ...theme.type.bodySm, color: theme.colors.textPrimary, fontWeight: '600' }}
+            >
               Planned perks
             </Text>
             {perks.map((line) => (
               <Body key={line}>• {line}</Body>
             ))}
-            <Body>We will keep the core app generous and calm—no surprise paywalls on your daily rhythm.</Body>
+            <Body>
+              We will keep the core app generous and calm—no surprise paywalls on your daily rhythm.
+            </Body>
           </View>
         )}
       </SectionCard>
 
       <SectionCard>
-        <Text style={{ ...theme.type.bodySm, color: theme.colors.textPrimary, fontWeight: '600', marginBottom: spacing.sm }}>
+        <Text
+          style={{
+            ...theme.type.bodySm,
+            color: theme.colors.textPrimary,
+            fontWeight: '600',
+            marginBottom: spacing.sm,
+          }}
+        >
           Have a promo code?
         </Text>
         <View style={{ gap: spacing.md }}>
           <Body>
-            If you have a code, enter it here. A valid code unlocks LoveDistance Plus on your account.
+            If you have a code, enter it here. A valid code unlocks LoveDistance Plus on your
+            account.
           </Body>
           <Input
             autoCapitalize="characters"
@@ -130,7 +147,13 @@ export default function PlusHubScreen() {
 
       {canMockToggle ? (
         <SectionCard>
-          <Text style={{ ...theme.type.bodySm, color: theme.colors.textMuted, marginBottom: spacing.sm }}>
+          <Text
+            style={{
+              ...theme.type.bodySm,
+              color: theme.colors.textMuted,
+              marginBottom: spacing.sm,
+            }}
+          >
             Developer: flip mock subscription tier
           </Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
@@ -150,7 +173,11 @@ export default function PlusHubScreen() {
         </SectionCard>
       ) : null}
 
-      <Button label="Back to settings" variant="ghost" onPress={() => router.replace('/(app)/(tabs)/settings' as Href)} />
+      <Button
+        label="Back to settings"
+        variant="ghost"
+        onPress={() => router.replace('/(app)/(tabs)/settings' as Href)}
+      />
     </SectionScaffold>
   );
 }

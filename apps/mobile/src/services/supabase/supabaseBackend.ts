@@ -160,7 +160,8 @@ async function rowToPromptThread(row: Tables<'couple_prompts'>): Promise<PromptT
       const visible = isPromptAnswerVisibleToViewer(revealed, viewerId, a.user_id);
       const imageUri =
         visible && a.image_storage_path
-          ? ((await trySignedUrlForBucketPath('prompt_attachments', a.image_storage_path)) ?? undefined)
+          ? ((await trySignedUrlForBucketPath('prompt_attachments', a.image_storage_path)) ??
+            undefined)
           : undefined;
       return {
         userId: a.user_id,
@@ -184,6 +185,7 @@ async function rowToPromptThread(row: Tables<'couple_prompts'>): Promise<PromptT
         userId: hiddenPartner,
         answer: '',
         submittedAt: new Date(0).toISOString(),
+        imageUri: undefined,
       });
     }
   }
@@ -338,12 +340,10 @@ export async function submitPromptAnswer(
     const suffix = ext === 'png' ? 'png' : 'jpg';
     const objectPath = `couple/${coupleId}/${promptId}/${randomUuid()}.${suffix}`;
     const buf = await (await fetch(input.imageUri)).arrayBuffer();
-    const { error: upErr } = await sb.storage
-      .from('prompt_attachments')
-      .upload(objectPath, buf, {
-        contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
-        upsert: false,
-      });
+    const { error: upErr } = await sb.storage.from('prompt_attachments').upload(objectPath, buf, {
+      contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
+      upsert: false,
+    });
     if (upErr) throw new Error(upErr.message);
     imagePath = objectPath;
   }
@@ -536,12 +536,10 @@ export async function sharePost(input: {
   const suffix = ext === 'png' ? 'png' : 'jpg';
   const objectPath = `couple/${coupleId}/${postId}.${suffix}`;
   const buf = await (await fetch(input.imageUri)).arrayBuffer();
-  const { error: upErr } = await sb.storage
-    .from('presence')
-    .upload(objectPath, buf, {
-      contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
-      upsert: false,
-    });
+  const { error: upErr } = await sb.storage.from('presence').upload(objectPath, buf, {
+    contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
+    upsert: false,
+  });
   if (upErr) throw new Error(upErr.message);
 
   const { data: row, error } = await sb

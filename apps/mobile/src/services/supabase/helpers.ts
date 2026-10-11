@@ -16,7 +16,9 @@ export function requireClient() {
   return supabaseClient;
 }
 
-export async function signedAvatarUrl(path: string | null | undefined): Promise<string | undefined> {
+export async function signedAvatarUrl(
+  path: string | null | undefined,
+): Promise<string | undefined> {
   if (!path || !isSupabaseConfigured || !supabaseClient) {
     return undefined;
   }
@@ -24,15 +26,19 @@ export async function signedAvatarUrl(path: string | null | undefined): Promise<
   return signed ?? undefined;
 }
 
-export async function mapUserProfile(user: User, row: Tables<'profiles'> | null): Promise<UserProfile> {
+export async function mapUserProfile(
+  user: User,
+  row: Tables<'profiles'> | null,
+): Promise<UserProfile> {
   const fromMeta = user.user_metadata as Record<string, unknown> | undefined;
-  const metaFirst =
-    typeof fromMeta?.first_name === 'string' ? fromMeta.first_name : undefined;
+  const metaFirst = typeof fromMeta?.first_name === 'string' ? fromMeta.first_name : undefined;
   return {
     id: user.id,
     firstName: row?.first_name?.trim() || metaFirst?.trim() || 'You',
     email: user.email ?? undefined,
-    displayName: row?.display_name ?? (typeof fromMeta?.display_name === 'string' ? fromMeta.display_name : undefined),
+    displayName:
+      row?.display_name ??
+      (typeof fromMeta?.display_name === 'string' ? fromMeta.display_name : undefined),
     avatarUrl: await signedAvatarUrl(row?.avatar_storage_path ?? undefined),
     timeZone: row?.time_zone ?? null,
   };

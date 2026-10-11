@@ -96,9 +96,11 @@ const FOLLOW_UP_SUGGESTIONS = [
   'Should we make this a new little tradition for us?',
 ];
 
-function suggestFollowUpsRotated(
-  input: { imageUri: string; promptQuestion: string; partnerName?: string },
-): string[] {
+function suggestFollowUpsRotated(input: {
+  imageUri: string;
+  promptQuestion: string;
+  partnerName?: string;
+}): string[] {
   const n = (input.imageUri.length + input.promptQuestion.length) % FOLLOW_UP_SUGGESTIONS.length;
   return [0, 1, 2].map((i) => FOLLOW_UP_SUGGESTIONS[(n + i) % FOLLOW_UP_SUGGESTIONS.length]);
 }
@@ -246,8 +248,7 @@ export const mockServices: ServiceRegistry = {
         throw new Error('Complete pairing first to use this feature.');
       }
       const reunionDate = input.reunionDate ?? undefined;
-      const reunionEndDate =
-        reunionDate != null ? (input.reunionEndDate ?? undefined) : undefined;
+      const reunionEndDate = reunionDate != null ? (input.reunionEndDate ?? undefined) : undefined;
       mockDb.couple = {
         ...mockDb.couple,
         reunionDate,
@@ -314,7 +315,9 @@ export const mockServices: ServiceRegistry = {
       const meId = mockDb.couple.meId;
       const partnerId = mockDb.couple.partner.id;
       const revealedPromptDates =
-        mockDb.prompt.isRevealed && mockDb.prompt.date >= minYmd && mockDb.prompt.date <= anchorPromptDateYmd
+        mockDb.prompt.isRevealed &&
+        mockDb.prompt.date >= minYmd &&
+        mockDb.prompt.date <= anchorPromptDateYmd
           ? [mockDb.prompt.date]
           : [];
       const mutualPresenceDates = mutualPresenceUtcYmds(
@@ -550,8 +553,8 @@ export const mockServices: ServiceRegistry = {
     },
     async markRead(ids) {
       const idSet = new Set(ids);
-      mockDb.notificationInbox = mockDb.notificationInbox.map((row): NotificationInboxItem =>
-        idSet.has(row.id) ? { ...row, read: true } : row,
+      mockDb.notificationInbox = mockDb.notificationInbox.map(
+        (row): NotificationInboxItem => (idSet.has(row.id) ? { ...row, read: true } : row),
       );
       return withLatency(mockDb.notificationInbox.map((x) => ({ ...x })));
     },

@@ -100,7 +100,11 @@ export const supabaseServices: ServiceRegistry = {
       if (!user) {
         throw new Error('Not signed in');
       }
-      const patch: { first_name?: string; display_name?: string | null; time_zone?: string | null } = {};
+      const patch: {
+        first_name?: string;
+        display_name?: string | null;
+        time_zone?: string | null;
+      } = {};
       if (partial.firstName !== undefined) {
         patch.first_name = partial.firstName.trim();
       }
@@ -142,7 +146,11 @@ export const supabaseServices: ServiceRegistry = {
       const lower = localUri.toLowerCase();
       const mime =
         contentType ??
-        (lower.endsWith('.png') ? 'image/png' : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg');
+        (lower.endsWith('.png')
+          ? 'image/png'
+          : lower.endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg');
       const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
       const path = `${user.id}/avatar.${ext}`;
       const { error: upErr } = await sb.storage.from('avatars').upload(path, buf, {
