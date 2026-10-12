@@ -685,6 +685,8 @@ export type Database = {
     Functions: {
       create_invite: { Args: { expires_in?: string }; Returns: Json };
       redeem_plus_promo: { Args: { p_code: string }; Returns: Json };
+      increment_presence_reaction: { Args: { p_post_id: string }; Returns: undefined };
+      hidden_prompt_partner: { Args: { p_prompt_id: string }; Returns: string };
       run_notification_digest_job: { Args: Record<PropertyKey, never>; Returns: undefined };
       is_member_of_couple: {
         Args: { p_couple_id: string; p_user_id: string };

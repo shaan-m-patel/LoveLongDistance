@@ -12,10 +12,15 @@ type CoupleProfilePayload = {
   partner: {
     id: string;
     firstName: string;
-    email?: string;
-    displayName?: string;
+    displayName?: string | null;
   };
   reunionDate?: string;
+};
+
+type AcceptInviteResult = {
+  ok?: boolean;
+  error?: string;
+  couple?: CoupleProfilePayload;
 };
 
 function json(body: unknown, status: number) {
@@ -23,6 +28,38 @@ function json(body: unknown, status: number) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+function statusForInviteError(code: string): number {
+  switch (code) {
+    case 'token_required':
+    case 'cannot_accept_own_invite':
+      return 400;
+    case 'invalid_session':
+      return 401;
+    case 'invite_not_found':
+      return 404;
+    case 'invite_expired':
+      return 410;
+    case 'invite_already_used':
+    case 'already_paired':
+    case 'already_member':
+    case 'couple_full':
+      return 409;
+    default:
+      return 500;
+  }
+}
+
+function knownErrorFromMessage(message: string): string | null {
+  const codes = [
+    'partner_not_found',
+    'couple_update_failed',
+    'couple_full',
+    'membership_failed',
+    'invite_already_used',
+  ];
+  return codes.find((code) => message.includes(code)) ?? null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -53,120 +90,35 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'token_required' }, 400);
     }
 
-    const { data: invite, error: invErr } = await admin
-      .from('invites')
-      .select('id, couple_id, inviter_id, expires_at, consumed_at')
-      .eq('token', token)
-      .maybeSingle();
-
-    if (invErr || !invite) {
-      return json({ error: 'invite_not_found' }, 404);
-    }
-    if (invite.consumed_at) {
-      return json({ error: 'invite_already_used' }, 409);
-    }
-    if (new Date(invite.expires_at) < new Date()) {
-      return json({ error: 'invite_expired' }, 410);
-    }
-    if (invite.inviter_id === user.id) {
-      return json({ error: 'cannot_accept_own_invite' }, 400);
-    }
-
-    const { data: memberships } = await admin.from('couple_members').select('couple_id').eq('user_id', user.id);
-
-    const coupleIds = memberships?.map((m) => m.couple_id) ?? [];
-    if (coupleIds.length > 0) {
-      const { data: completed } = await admin
-        .from('couples')
-        .select('id')
-        .in('id', coupleIds)
-        .eq('is_complete', true)
-        .limit(1)
-        .maybeSingle();
-      if (completed) {
-        return json({ error: 'already_paired' }, 409);
-      }
-    }
-
-    const { error: memErr } = await admin.from('couple_members').insert({
-      couple_id: invite.couple_id,
-      user_id: user.id,
+    const { data, error } = await admin.rpc('accept_couple_invite', {
+      p_token: token,
+      p_acceptor_id: user.id,
     });
 
-    if (memErr) {
-      if (memErr.code === '23505') {
-        return json({ error: 'already_member' }, 409);
-      }
-      console.error(memErr);
-      return json({ error: 'membership_failed' }, 500);
+    if (error) {
+      console.error(error);
+      const code = knownErrorFromMessage(error.message) ?? 'internal_error';
+      return json({ error: code }, statusForInviteError(code));
     }
 
-    const reunion = new Date();
-    reunion.setDate(reunion.getDate() + 42);
-
-    const { error: coupErr } = await admin
-      .from('couples')
-      .update({ is_complete: true, reunion_date: reunion.toISOString() })
-      .eq('id', invite.couple_id);
-
-    if (coupErr) {
-      console.error(coupErr);
-      return json({ error: 'couple_update_failed' }, 500);
+    const result = (data ?? null) as AcceptInviteResult | null;
+    if (!result?.ok || !result.couple?.id || !result.couple.partner?.id) {
+      const code = result?.error ?? 'internal_error';
+      return json({ error: code }, statusForInviteError(code));
     }
 
-    const { error: consErr } = await admin
-      .from('invites')
-      .update({
-        consumed_at: new Date().toISOString(),
-        consumed_by_user_id: user.id,
-      })
-      .eq('id', invite.id);
-
-    if (consErr) {
-      console.error(consErr);
-    }
-
-    const { data: members, error: memQErr } = await admin
-      .from('couple_members')
-      .select('user_id')
-      .eq('couple_id', invite.couple_id);
-
-    if (memQErr || !members?.length) {
-      return json({ error: 'members_load_failed' }, 500);
-    }
-
-    const partnerId = members.find((m) => m.user_id !== user.id)?.user_id;
-    if (!partnerId) {
-      return json({ error: 'partner_not_found' }, 500);
-    }
-
-    const { data: profiles } = await admin
-      .from('profiles')
-      .select('id, first_name, display_name')
-      .in('id', [user.id, partnerId]);
-
-    const partnerProfile = profiles?.find((p) => p.id === partnerId);
-
-    const { data: partnerAuth, error: pAuthErr } = await admin.auth.admin.getUserById(partnerId);
-    if (pAuthErr) {
-      console.error(pAuthErr);
-    }
-
-    const partnerEmail = partnerAuth?.user?.email ?? undefined;
-
-    const payload: CoupleProfilePayload = {
-      id: invite.couple_id,
-      meId: user.id,
+    const couple: CoupleProfilePayload = {
+      id: result.couple.id,
+      meId: result.couple.meId,
       partner: {
-        id: partnerId,
-        firstName: partnerProfile?.first_name?.trim() || 'Partner',
-        email: partnerEmail,
-        displayName: partnerProfile?.display_name ?? undefined,
+        id: result.couple.partner.id,
+        firstName: result.couple.partner.firstName,
+        displayName: result.couple.partner.displayName ?? undefined,
       },
-      reunionDate: reunion.toISOString(),
+      reunionDate: result.couple.reunionDate,
     };
 
-    return json({ couple: payload }, 200);
+    return json({ couple }, 200);
   } catch (e) {
     console.error(e);
     return json({ error: 'internal_error' }, 500);

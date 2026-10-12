@@ -30,14 +30,16 @@ import {
   mutualPresenceUtcYmds,
 } from '@/features/home/homeEngagementStreak';
 import { isUserAllowedToToggleHabit } from '@/features/habits/habitPolicy';
+import { safeNotificationHref } from '@/features/notifications/inboxLabels';
 import { pickCouplesPromptForDay } from '@/features/prompts/promptLibraryPick';
-import { getIsPromptRevealed } from '@/features/prompts/revealLogic';
+import { isPromptAnswerVisibleToViewer } from '@/features/prompts/revealLogic';
 import {
   mapInviteFailure,
-  publicAvatarUrl,
   requireClient,
+  signedAvatarUrl,
   signedUrlForBucketPath,
   todayYmdUtc,
+  trySignedUrlForBucketPath,
 } from '@/services/supabase/helpers';
 
 function randomUuid(): string {
@@ -87,7 +89,7 @@ export async function loadCompleteCoupleProfile(): Promise<CoupleProfile | null>
     id: partnerId,
     firstName: partnerRow?.first_name?.trim() || 'Partner',
     displayName: partnerRow?.display_name ?? undefined,
-    avatarUrl: publicAvatarUrl(partnerRow?.avatar_storage_path ?? undefined),
+    avatarUrl: await signedAvatarUrl(partnerRow?.avatar_storage_path ?? undefined),
     timeZone: partnerRow?.time_zone ?? null,
   };
 
@@ -145,21 +147,48 @@ function mapCategory(row: Tables<'couple_prompts'>): PromptThreadCategory | unde
 
 async function rowToPromptThread(row: Tables<'couple_prompts'>): Promise<PromptThread> {
   const sb = requireClient();
-  const [{ data: answers }, { data: reactions }] = await Promise.all([
+  const [{ data: answers }, { data: reactions }, { data: userData }] = await Promise.all([
     sb.from('prompt_answers').select('*').eq('couple_prompt_id', row.id),
     sb.from('prompt_reactions').select('*').eq('couple_prompt_id', row.id),
+    sb.auth.getUser(),
   ]);
+  const viewerId = userData.user?.id;
+  const revealed = row.is_revealed;
 
   const resolvedAnswers = await Promise.all(
-    (answers ?? []).map(async (a) => ({
-      userId: a.user_id,
-      answer: a.body,
-      submittedAt: a.submitted_at,
-      imageUri: a.image_storage_path
-        ? await signedUrlForBucketPath('prompt_attachments', a.image_storage_path)
-        : undefined,
-    })),
+    (answers ?? []).map(async (a) => {
+      const visible = isPromptAnswerVisibleToViewer(revealed, viewerId, a.user_id);
+      const imageUri =
+        visible && a.image_storage_path
+          ? ((await trySignedUrlForBucketPath('prompt_attachments', a.image_storage_path)) ??
+            undefined)
+          : undefined;
+      return {
+        userId: a.user_id,
+        answer: visible ? a.body : '',
+        submittedAt: a.submitted_at,
+        imageUri,
+      };
+    }),
   );
+
+  if (!revealed) {
+    const { data: hiddenPartner, error: hiddenErr } = await sb.rpc('hidden_prompt_partner', {
+      p_prompt_id: row.id,
+    });
+    if (
+      !hiddenErr &&
+      typeof hiddenPartner === 'string' &&
+      !resolvedAnswers.some((a) => a.userId === hiddenPartner)
+    ) {
+      resolvedAnswers.push({
+        userId: hiddenPartner,
+        answer: '',
+        submittedAt: new Date(0).toISOString(),
+        imageUri: undefined,
+      });
+    }
+  }
 
   return {
     promptId: row.id,
@@ -167,7 +196,7 @@ async function rowToPromptThread(row: Tables<'couple_prompts'>): Promise<PromptT
     question: row.question,
     category: mapCategory(row),
     answers: resolvedAnswers,
-    isRevealed: row.is_revealed || getIsPromptRevealed(resolvedAnswers),
+    isRevealed: revealed,
     reactions: (reactions ?? []).map((r) => ({
       id: r.id,
       userId: r.user_id,
@@ -311,12 +340,10 @@ export async function submitPromptAnswer(
     const suffix = ext === 'png' ? 'png' : 'jpg';
     const objectPath = `couple/${coupleId}/${promptId}/${randomUuid()}.${suffix}`;
     const buf = await (await fetch(input.imageUri)).arrayBuffer();
-    const { error: upErr } = await sb.storage
-      .from('prompt_attachments')
-      .upload(objectPath, buf, {
-        contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
-        upsert: true,
-      });
+    const { error: upErr } = await sb.storage.from('prompt_attachments').upload(objectPath, buf, {
+      contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
+      upsert: false,
+    });
     if (upErr) throw new Error(upErr.message);
     imagePath = objectPath;
   }
@@ -476,7 +503,8 @@ export async function getLatestPosts(): Promise<PresencePost[]> {
 
   const out: PresencePost[] = [];
   for (const r of rows ?? []) {
-    const imageUri = await signedUrlForBucketPath('presence', r.storage_path);
+    const imageUri = await trySignedUrlForBucketPath('presence', r.storage_path);
+    if (!imageUri) continue;
     out.push({
       id: r.id,
       authorId: r.author_id,
@@ -508,12 +536,10 @@ export async function sharePost(input: {
   const suffix = ext === 'png' ? 'png' : 'jpg';
   const objectPath = `couple/${coupleId}/${postId}.${suffix}`;
   const buf = await (await fetch(input.imageUri)).arrayBuffer();
-  const { error: upErr } = await sb.storage
-    .from('presence')
-    .upload(objectPath, buf, {
-      contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
-      upsert: true,
-    });
+  const { error: upErr } = await sb.storage.from('presence').upload(objectPath, buf, {
+    contentType: suffix === 'png' ? 'image/png' : 'image/jpeg',
+    upsert: false,
+  });
   if (upErr) throw new Error(upErr.message);
 
   const { data: row, error } = await sb
@@ -547,16 +573,7 @@ export async function sharePost(input: {
 
 export async function reactToPost(postId: string): Promise<void> {
   const sb = requireClient();
-  const { data: row } = await sb
-    .from('presence_posts')
-    .select('reaction_count')
-    .eq('id', postId)
-    .maybeSingle();
-  if (!row) throw new Error('Post not found.');
-  const { error } = await sb
-    .from('presence_posts')
-    .update({ reaction_count: row.reaction_count + 1 })
-    .eq('id', postId);
+  const { error } = await sb.rpc('increment_presence_reaction', { p_post_id: postId });
   if (error) throw new Error(error.message);
 }
 
@@ -633,7 +650,7 @@ export async function listInbox(limit = 50): Promise<NotificationInboxItem[]> {
     summary: r.summary,
     createdAt: r.created_at,
     read: r.read,
-    href: r.href ?? undefined,
+    href: safeNotificationHref(r.href),
   }));
 }
 
@@ -817,7 +834,7 @@ export async function listMemories(filter: TimelineMemoryFilter = 'all'): Promis
   for (const r of rows ?? []) {
     let imageUri: string | undefined;
     if (r.image_storage_path) {
-      imageUri = await signedUrlForBucketPath('presence', r.image_storage_path);
+      imageUri = (await trySignedUrlForBucketPath('presence', r.image_storage_path)) ?? undefined;
     }
     out.push(mapMemory(r, imageUri));
   }
@@ -830,7 +847,7 @@ export async function getMemoryById(memoryId: string): Promise<MemoryItem | null
   if (!r) return null;
   let imageUri: string | undefined;
   if (r.image_storage_path) {
-    imageUri = await signedUrlForBucketPath('presence', r.image_storage_path);
+    imageUri = (await trySignedUrlForBucketPath('presence', r.image_storage_path)) ?? undefined;
   }
   return mapMemory(r, imageUri);
 }
@@ -849,7 +866,7 @@ export async function setMemoryFavorite(
   if (error || !data) throw new Error(error?.message ?? 'Memory not found.');
   let imageUri: string | undefined;
   if (data.image_storage_path) {
-    imageUri = await signedUrlForBucketPath('presence', data.image_storage_path);
+    imageUri = (await trySignedUrlForBucketPath('presence', data.image_storage_path)) ?? undefined;
   }
   return mapMemory(data, imageUri);
 }

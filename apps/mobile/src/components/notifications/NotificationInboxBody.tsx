@@ -22,6 +22,7 @@ import {
   useMarkNotificationsRead,
   useNotificationInbox,
 } from '@/features/hooks';
+import { safeNotificationHref } from '@/features/notifications/inboxLabels';
 import type { NotificationCategory, NotificationInboxItem } from '@/types/domain';
 import { usesConfiguredSupabase } from '@/services/apiMode';
 import { supabaseClient } from '@/services/supabase/client';
@@ -101,8 +102,7 @@ export function NotificationInboxBody({
   const markAll = useMarkAllNotificationsRead();
   /** Unique per mount so peek + full-screen inboxes do not share one Realtime topic. */
   const realtimeChannelInstanceId = useRef(
-    globalThis.crypto?.randomUUID?.() ??
-      `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+    globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
   );
 
   useFocusEffect(
@@ -149,8 +149,9 @@ export function NotificationInboxBody({
       if (!item.read) {
         markRead.mutate([item.id]);
       }
-      if (item.href) {
-        router.push(item.href as Href);
+      const href = safeNotificationHref(item.href);
+      if (href) {
+        router.push(href as Href);
         onNavigateFromRow?.();
       }
     },
@@ -162,8 +163,13 @@ export function NotificationInboxBody({
 
   if (isLoading) {
     return (
-      <View style={{ padding: variant === 'peek' ? spacing.lg : spacing.xxl, alignItems: 'center' }}>
-        <ActivityIndicator color={theme.colors.primary} size={variant === 'peek' ? 'small' : 'large'} />
+      <View
+        style={{ padding: variant === 'peek' ? spacing.lg : spacing.xxl, alignItems: 'center' }}
+      >
+        <ActivityIndicator
+          color={theme.colors.primary}
+          size={variant === 'peek' ? 'small' : 'large'}
+        />
       </View>
     );
   }
@@ -202,20 +208,33 @@ export function NotificationInboxBody({
           />
         </View>
       ) : (
-        <View style={{ paddingHorizontal: horizontal, paddingTop: topPadding, paddingBottom: spacing.xs }}>
+        <View
+          style={{
+            paddingHorizontal: horizontal,
+            paddingTop: topPadding,
+            paddingBottom: spacing.xs,
+          }}
+        >
           <Text style={{ ...typeBase.caption, color: theme.colors.textMuted }}>
-            {live ? 'Live inbox when paired; toggles in Settings → Notifications.' : 'Preview; toggles in Settings → Notifications.'}
+            {live
+              ? 'Live inbox when paired; toggles in Settings → Notifications.'
+              : 'Preview; toggles in Settings → Notifications.'}
           </Text>
         </View>
       )}
       <SectionList<NotificationInboxItem, InboxSection>
-        style={[{ flex: variant === 'screen' ? 1 : undefined, maxHeight: listMaxHeight }, listStyle]}
+        style={[
+          { flex: variant === 'screen' ? 1 : undefined, maxHeight: listMaxHeight },
+          listStyle,
+        ]}
         sections={sections}
         keyExtractor={(item) => item.id}
         renderSectionHeader={({ section }) => (
           <NotificationCategoryHeader category={section.category} />
         )}
-        renderItem={({ item }) => <NotificationListRow item={item} onPress={() => onRowPress(item)} />}
+        renderItem={({ item }) => (
+          <NotificationListRow item={item} onPress={() => onRowPress(item)} />
+        )}
         stickySectionHeadersEnabled={false}
         contentContainerStyle={{ paddingBottom: variant === 'screen' ? spacing.xxxl : spacing.sm }}
         ListFooterComponent={
